@@ -1,3 +1,96 @@
 body{
   background-color: #f0f0f0;
 }
+
+.fade-enter {
+    opacity: 0;
+    transform: scale(1);
+  }
+  .fade-enter-active {
+    opacity: 1;
+    transform: scale(1);
+    transition: opacity 300ms, transform 300ms;
+  }
+  .fade-exit {
+    opacity: 1;
+    transform: scale(1);
+  }
+  .fade-exit-active {
+    opacity: 0;
+    transform: scale(1);
+    transition: opacity 300ms, transform 300ms;
+  }
+
+  /* styles.css */
+.dashboard-container {
+    display: flex;
+    height: 100vh;
+    overflow: hidden; /* Para que no se desborde el contenido */
+    transition: all 0.3s ease; /* Transición suave para el colapso */
+  }
+  
+  .sidebar {
+    width: 250px; /* Ancho del sidebar */
+    background-color: #2c3e50; /* Color de fondo del sidebar */
+    color: white; /* Color del texto */
+    padding: 20px;
+    box-shadow: 2px 0 5px rgba(0, 0, 0, 0.1);
+    transition: width 0.3s ease; /* Transición suave para el ancho */
+  }
+  
+  .sidebar.collapsed {
+    width: 60px; /* Ancho cuando está colapsado */
+  }
+  
+  .toggle-button {
+    background: none;
+    border: none;
+    color: white;
+    font-size: 24px; /* Tamaño del ícono */
+    cursor: pointer;
+    margin-bottom: 20px; /* Espacio bajo el botón */
+  }
+  
+  .sidebar h2 {
+    margin-bottom: 20px;
+  }
+  
+  .sidebar ul {
+    list-style-type: none;
+    padding: 0;
+  }
+  
+  .sidebar ul li {
+    padding: 10px 15px;
+    cursor: pointer;
+    transition: background 0.3s;
+  }
+  
+  .sidebar ul li:hover {
+    background-color: #34495e; /* Color al pasar el ratón */
+  }
+  
+  .main-content {
+    flex-grow: 1;
+    padding: 20px;
+    background-color: #ecf0f1; /* Color de fondo del contenido */
+    transition: margin-left 0.3s ease; /* Transición suave para el margen */
+  }
+  
+  .dashboard-container.collapsed .main-content {
+    margin-left: 60px; /* Margen a la izquierda cuando el sidebar está colapsado */
+  }
+  
+  /* Responsivo */
+  @media (max-width: 768px) {
+    .sidebar {
+      width: 100%;
+      height: auto;
+      position: relative;
+    }
+  
+    .main-content {
+      padding: 10px; /* Menos espacio en pantallas pequeñas */
+    }
+  }
+  

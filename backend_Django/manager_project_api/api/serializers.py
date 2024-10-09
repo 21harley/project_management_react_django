@@ -8,7 +8,7 @@ class UsuarioSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Usuario
-        fields = ['id', 'username', 'email', 'nombre', 'password']
+        fields = ['id', 'username', 'email', 'nombre', 'password','rol']
 
     def create(self, validated_data):
         # Hash the password before saving the user

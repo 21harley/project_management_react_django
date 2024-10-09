@@ -1,3 +1,4 @@
+from venv import logger
 from rest_framework import viewsets, permissions
 from .models import Proyecto, Tarea
 from .serializers import ProyectoSerializer, TareaSerializer
@@ -41,28 +42,23 @@ class UsuarioViewSet(viewsets.ModelViewSet):
     serializer_class = UsuarioSerializer
 
     def get_permissions(self):
-        if self.action == 'create' or self.action == 'login':
-            self.permission_classes = [AllowAny]
+        if self.action in ['create', 'login']:
+            self.permission_classes = [permissions.AllowAny]
         else:
-            self.permission_classes = [IsAuthenticated]
+            logger.info(f"Usuario autenticado: {self.request.user}")  # Para depuración
+            self.permission_classes = [permissions.IsAuthenticated]
         return super(UsuarioViewSet, self).get_permissions()
 
     def create(self, request):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        # Guarda el usuario
         user = serializer.save()
-        # Genera un token para el usuario
         refresh = RefreshToken.for_user(user)
-        # Devuelve el token y el usuario como parte de la respuesta
         return Response({
             'user': serializer.data,
             'refresh': str(refresh),
             'token': str(refresh.access_token),
         }, status=status.HTTP_201_CREATED)
-
-    def perform_update(self, serializer):
-        serializer.save()
 
     @action(detail=False, methods=['post'], permission_classes=[permissions.AllowAny])
     def login(self, request):
@@ -78,6 +74,16 @@ class UsuarioViewSet(viewsets.ModelViewSet):
                     'token': str(refresh.access_token),
                 })
             else:
-                return Response({'detail': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
+                return Response({'detail': 'Invalid credentials AA'}, status=status.HTTP_401_UNAUTHORIZED)
         except Usuario.DoesNotExist:
-            return Response({'detail': 'User does not exist'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({'detail': 'User does not exist BB'}, status=status.HTTP_404_NOT_FOUND)
+
+    @action(detail=True, methods=['get'], permission_classes=[permissions.IsAuthenticated])
+    def get_user_info(self, request, pk=None):
+        logger.info(f"Buscando usuario con ID: {pk}")  # Para depuración
+        try:
+            user = Usuario.objects.get(pk=pk)
+            return Response(UsuarioSerializer(user).data, status=status.HTTP_200_OK)
+        except Usuario.DoesNotExist:
+            logger.error(f"Usuario con ID {pk} no encontrado")
+            return Response({'detail': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
