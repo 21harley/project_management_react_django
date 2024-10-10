@@ -1,5 +1,18 @@
+from django.utils import timezone
 from django.db import models
 from django.contrib.auth.models import AbstractUser
+from enum import Enum
+
+# Define el Enum para los estados de la tarea
+class EstadoTarea(Enum):
+    PENDIENTE = 1
+    DESARROLLO = 2
+    TERMINADO = 3
+    OBSERVADO = 4
+
+    @classmethod
+    def choices(cls):
+        return [(tag.name.lower(), tag.value) for tag in cls]
 
 # Usuario
 class Usuario(AbstractUser):
@@ -9,14 +22,14 @@ class Usuario(AbstractUser):
     # Especifica un related_name diferente para evitar conflictos
     groups = models.ManyToManyField(
         'auth.Group',
-        related_name='custom_user_set',  # Cambia el related_name
+        related_name='custom_user_set',
         blank=True,
         help_text='The groups this user belongs to.'
     )
 
     user_permissions = models.ManyToManyField(
         'auth.Permission',
-        related_name='custom_user_permissions_set',  # Cambia el related_name
+        related_name='custom_user_permissions_set',
         blank=True,
         help_text='Specific permissions for this user.'
     )
@@ -34,16 +47,24 @@ class Proyecto(models.Model):
 
 # Tarea
 class Tarea(models.Model):
-    ESTADO_CHOICES = [
-        ('pendiente', 'Pendiente'),
-        ('en_progreso', 'En progreso'),
-        ('completada', 'Completada'),
-    ]
     nombre = models.CharField(max_length=255)
     descripcion = models.TextField()
-    estado = models.CharField(max_length=15, choices=ESTADO_CHOICES, default='pendiente')
+    estado = models.TextField()
     proyecto = models.ForeignKey(Proyecto, on_delete=models.CASCADE, related_name='tareas')
     asignada_a = models.ForeignKey(Usuario, on_delete=models.CASCADE, related_name='tareas_asignadas')
 
     def __str__(self):
         return self.nombre
+
+class Alerta(models.Model):
+    mensaje = models.TextField()
+    usuario = models.ForeignKey(Usuario, on_delete=models.CASCADE)  # El usuario al que va dirigida la alerta
+    visible = models.BooleanField(default=True)  # Controlar si la alerta es visible o no
+    fecha_emision = models.DateTimeField(default=timezone.now)  # Fecha de emisión de la alerta
+
+    def __str__(self):
+        return f'Alerta para {self.usuario.username} - {self.mensaje[:20]}...'
+
+    class Meta:
+        verbose_name = "Alerta"
+        verbose_name_plural = "Alertas"

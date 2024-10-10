@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Usuario, Proyecto, Tarea
+from .models import Alerta, Usuario, Proyecto, Tarea
 from django.contrib.auth.hashers import make_password
 
 class UsuarioSerializer(serializers.ModelSerializer):
@@ -28,6 +28,12 @@ class ProyectoSerializer(serializers.ModelSerializer):
         fields = ['id', 'nombre', 'descripcion', 'fecha_inicio', 'fecha_finalizacion', 'usuario']
 
 class TareaSerializer(serializers.ModelSerializer):
+    proyecto = ProyectoSerializer(read_only=True)  
     class Meta:
         model = Tarea
         fields = ['id', 'nombre', 'descripcion', 'estado', 'proyecto', 'asignada_a']
+
+class AlertaSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Alerta
+        fields = ['id', 'mensaje', 'usuario', 'visible', 'fecha_emision'] 
