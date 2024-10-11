@@ -13,5 +13,5 @@ from .views import UsuarioViewSet  # Asegúrate de que tu vista de login esté e
 urlpatterns = [
     path('api/login/', UsuarioViewSet.as_view({'post': 'login'}), name='login'),
     path('api/me/', UsuarioViewSet.as_view({'get': 'me'}), name='me'),  # Ruta para ver datos del usuario
-    path('api/usuarios/delete/', UsuarioViewSet.as_view({'delete': 'delete_user'}), name='delete_user'),  # Ruta para eliminar usuario
+    path('api/usuarios/<int:pk>/', UsuarioViewSet.as_view({'delete': 'destroy'}), name='delete_user'),
 ] + router.urls

@@ -1,4 +1,3 @@
-// src/pages/ProjectsTable.tsx
 import React, { useEffect, useState } from 'react';
 import {
   Table,
@@ -18,48 +17,66 @@ import {
   MenuItem,
   FormControl,
   InputLabel,
+  Snackbar,
+  Alert,
 } from '@mui/material';
-import {  getUsers } from './../../services/user.service'; // Asegúrate de tener estos servicios
-import { obtenerProyectos } from './../../services/proyecto.service'; // Asegúrate de tener estos servicios
-import { Proyecto } from './../../types/proyecto.type'; // Asegúrate de definir el tipo Project
-import { User } from '../../types/auth.types'; // Asegúrate de definir el tipo User
+import { getUsers } from './../../services/user.service';
+import { obtenerProyectos, crearProyecto, actualizarProyecto, eliminarProyecto, obtenerProyecto } from './../../services/proyecto.service';
+import { Proyecto, CrearProyecto, ActualizarProyecto } from './../../types/proyecto.type';
+import { User } from '../../types/auth.types';
+
 
 const ProjectsTable: React.FC<{ isAdmin: boolean }> = ({ isAdmin }) => {
   const [projects, setProjects] = useState<Proyecto[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [open, setOpen] = useState(false);
-  const [newProject, setNewProject] = useState({ name: '', description: '', assignedUserId: '' });
+  const [newProject, setNewProject] = useState<CrearProyecto>({
+    nombre: '',
+    descripcion: '',
+    usuario: 0, // Asumimos que el ID del usuario será un número
+    fecha_inicio: '',
+    fecha_finalizacion: ''
+  });
+  const [isEditing, setIsEditing] = useState(false);
+  const [currentProjectId, setCurrentProjectId] = useState<number | null>(null);
+
+  //alerta
+  const [snackbarOpen, setSnackbarOpen] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState('');
+  const [snackbarSeverity, setSnackbarSeverity] = useState<'success' | 'error'>('success');
 
   useEffect(() => {
-    const fetchProjects = async () => {
-      try {
-        const projectList = await obtenerProyectos();
-        setProjects(projectList);
-      } catch (error) {
-        console.error('Error fetching projects', error);
-      }
-    };
-
-    const fetchUsers = async () => {
-      try {
-        const userList = await getUsers();
-        setUsers(userList);
-      } catch (error) {
-        console.error('Error fetching users', error);
-      }
-    };
-
     fetchProjects();
     fetchUsers();
   }, []);
 
+  const fetchProjects = async () => {
+    try {
+      const projectList = await obtenerProyectos();
+      setProjects(projectList);
+    } catch (error) {
+      console.error('Error fetching projects', error);
+    }
+  };
+
+  const fetchUsers = async () => {
+    try {
+      const userList = await getUsers();
+      setUsers(userList);
+    } catch (error) {
+      console.error('Error fetching users', error);
+    }
+  };
+
   const handleOpen = () => {
     setOpen(true);
+    setIsEditing(false);
+    setNewProject({ nombre: '', descripcion: '', usuario: 0, fecha_inicio: '', fecha_finalizacion: '' });
   };
 
   const handleClose = () => {
     setOpen(false);
-    setNewProject({ name: '', description: '', assignedUserId: '' });
+    setIsEditing(false);
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | { name?: string; value: unknown }>) => {
@@ -67,20 +84,87 @@ const ProjectsTable: React.FC<{ isAdmin: boolean }> = ({ isAdmin }) => {
     setNewProject({ ...newProject, [name]: value });
   };
 
+  const handleUserChange = (e: React.ChangeEvent<{ value: unknown }>) => {
+    setNewProject({ ...newProject, usuario: Number(e.target.value) }); // Convertir a número
+  };
+
   const handleCreateProject = async () => {
-    // Lógica para crear un nuevo proyecto, usando el servicio correspondiente
-    console.log('Crear proyecto:', newProject);
-    handleClose();
+    try {
+      await crearProyecto(newProject).then(() => {
+        setSnackbarMessage('Proyecto creado con éxito');
+        setSnackbarSeverity('success');
+        setSnackbarOpen(true);
+        handleClose();
+        fetchProjects();
+      }).catch((error) => {
+        console.error('Error creando proyecto', error);
+        setSnackbarMessage('Error:' + error.response.data.msg);
+        setSnackbarSeverity('error');
+        setSnackbarOpen(true);
+      })
+    } catch (error) {
+      console.error('Error creando proyecto', error);
+    }
   };
 
-  const handleEditProject = (id: number) => {
-    // Lógica para editar el proyecto (puedes implementar un modal similar al de crear)
-    console.log('Editar proyecto con ID:', id);
+  const handleEditProject = async (id: number) => {
+    try {
+      const project = await obtenerProyecto(id);
+      if (project) {
+        setCurrentProjectId(project.id);
+        setNewProject({
+          nombre: project.nombre,
+          descripcion: project.descripcion,
+          usuario: project.usuario,
+          fecha_inicio: project.fecha_inicio,
+          fecha_finalizacion: project.fecha_finalizacion,
+        });
+        setIsEditing(true);
+        setOpen(true);
+      }
+    } catch (error) {
+      console.error('Error obteniendo proyecto', error);
+    }
   };
 
-  const handleDeleteProject = (id: number) => {
-    // Lógica para eliminar el proyecto (aquí puedes llamar a tu API para eliminar)
-    console.log('Eliminar proyecto con ID:', id);
+  const handleUpdateProject = async () => {
+    if (currentProjectId !== null) {
+      try {
+        await actualizarProyecto(currentProjectId, { ...newProject }).then(() => {
+          setSnackbarMessage('Proyecto actualizado con éxito');
+          setSnackbarSeverity('success');
+          setSnackbarOpen(true);
+          handleClose();
+          fetchProjects();
+        }).catch((error) => {
+          console.error('Error actualizando proyecto', error);
+          setSnackbarMessage('Error:' + error.response.data.msg);
+          setSnackbarSeverity('error');
+          setSnackbarOpen(true);
+        });;
+      } catch (error) {
+        console.error('Error actualizando proyecto', error);
+      }
+    }
+  };
+
+  const handleDeleteProject = async (id: number) => {
+    try {
+      await eliminarProyecto(id).then(() => {
+        setProjects(projects.filter(project => project.id !== id));
+        setSnackbarMessage('Proyecto eliminado con éxito');
+        setSnackbarSeverity('success');
+        setSnackbarOpen(true);
+        fetchProjects();
+      }).catch((error) => {
+        console.error('Error eliminando proyecto', error);
+        setSnackbarMessage('Error:' + error.response.data.msg);
+        setSnackbarSeverity('error');
+        setSnackbarOpen(true);
+      });
+    } catch (error) {
+      console.error('Error eliminando proyecto', error);
+    }
   };
 
   return (
@@ -102,12 +186,12 @@ const ProjectsTable: React.FC<{ isAdmin: boolean }> = ({ isAdmin }) => {
             </TableRow>
           </TableHead>
           <TableBody>
-            {projects.map((project:Proyecto) => (
+            {projects.map((project: Proyecto) => (
               <TableRow key={project.id}>
                 <TableCell>{project.id}</TableCell>
                 <TableCell>{project.nombre}</TableCell>
                 <TableCell>{project.descripcion}</TableCell>
-                <TableCell>{project.usuario}</TableCell>
+                <TableCell>{users.find(user => user.id === project.usuario)?.username}</TableCell>
                 <TableCell>
                   <Button onClick={() => handleEditProject(project.id)} color="primary">
                     Editar
@@ -122,9 +206,9 @@ const ProjectsTable: React.FC<{ isAdmin: boolean }> = ({ isAdmin }) => {
         </Table>
       </TableContainer>
 
-      {/* Modal para crear un nuevo proyecto */}
+      {/* Modal para crear o editar proyecto */}
       <Dialog open={open} onClose={handleClose}>
-        <DialogTitle>Crear Proyecto</DialogTitle>
+        <DialogTitle>{isEditing ? 'Editar Proyecto' : 'Crear Proyecto'}</DialogTitle>
         <DialogContent>
           <TextField
             autoFocus
@@ -132,8 +216,8 @@ const ProjectsTable: React.FC<{ isAdmin: boolean }> = ({ isAdmin }) => {
             label="Nombre"
             type="text"
             fullWidth
-            name="name"
-            value={newProject.name}
+            name="nombre"
+            value={newProject.nombre}
             onChange={handleInputChange}
           />
           <TextField
@@ -141,35 +225,15 @@ const ProjectsTable: React.FC<{ isAdmin: boolean }> = ({ isAdmin }) => {
             label="Descripción"
             type="text"
             fullWidth
-            name="description"
-            value={newProject.description}
+            name="descripcion"
+            value={newProject.descripcion}
             onChange={handleInputChange}
           />
           <FormControl fullWidth margin="dense">
             <InputLabel>Usuario Asignado</InputLabel>
-
-          </FormControl>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleClose} color="primary">
-            Cancelar
-          </Button>
-          <Button onClick={handleCreateProject} color="primary">
-            Crear
-          </Button>
-        </DialogActions>
-      </Dialog>
-    </div>
-  );
-};
-
-export default ProjectsTable;
-
-/*
             <Select
-              name="assignedUserId"
-              value={newProject.assignedUserId}
-              onChange={handleInputChange}
+              value={newProject.usuario}
+              onChange={handleUserChange}
             >
               {users.map((user) => (
                 <MenuItem key={user.id} value={user.id}>
@@ -177,4 +241,55 @@ export default ProjectsTable;
                 </MenuItem>
               ))}
             </Select>
-*/
+          </FormControl>
+          <TextField
+            margin="dense"
+            label="Fecha de Inicio"
+            type="date"
+            fullWidth
+            name="fecha_inicio"
+            value={newProject.fecha_inicio} // Asegúrate de que newProject tenga esta propiedad
+            onChange={handleInputChange}
+            InputLabelProps={{
+              shrink: true,
+            }}
+          />
+          <TextField
+            margin="dense"
+            label="Fecha de Fin"
+            type="date"
+            fullWidth
+            name="fecha_finalizacion"
+            value={newProject.fecha_finalizacion} // Asegúrate de que newProject tenga esta propiedad
+            onChange={handleInputChange}
+            InputLabelProps={{
+              shrink: true,
+            }}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleClose} color="primary">
+            Cancelar
+          </Button>
+          <Button onClick={isEditing ? handleUpdateProject : handleCreateProject} color="primary">
+            {isEditing ? 'Actualizar' : 'Crear'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+
+      {/* Snackbar para notificaciones */}
+      <Snackbar
+        open={snackbarOpen}
+        autoHideDuration={6000}
+        onClose={() => setSnackbarOpen(false)}
+      >
+        <Alert onClose={() => setSnackbarOpen(false)} severity={snackbarSeverity}>
+          {snackbarMessage}
+        </Alert>
+      </Snackbar>
+    </div>
+  );
+};
+
+export default ProjectsTable;

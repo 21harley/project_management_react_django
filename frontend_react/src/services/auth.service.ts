@@ -18,7 +18,7 @@ export const login = async (data: LoginData): Promise<AuthResponse> => {
 export const register = async (data: RegisterData): Promise<AuthResponse> => {
   try {
     // Llamada al endpoint de registro en tu API
-    const response = await axios.post<AuthResponse>(`${API_URL}register/`, data);
+    const response = await axios.post<AuthResponse>(`${API_URL}usuarios/`, data);
 
     // Almacenar el token en localStorage si es necesario
     if (response.data.token) {

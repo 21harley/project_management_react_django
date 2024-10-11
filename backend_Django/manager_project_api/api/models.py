@@ -40,7 +40,7 @@ class Proyecto(models.Model):
     descripcion = models.TextField()
     fecha_inicio = models.DateField()
     fecha_finalizacion = models.DateField()
-    usuario = models.ForeignKey(Usuario, on_delete=models.CASCADE, related_name='proyectos')
+    usuario = models.ForeignKey(Usuario, related_name='proyectos', on_delete=models.CASCADE)
 
     def __str__(self):
         return self.nombre
@@ -50,8 +50,8 @@ class Tarea(models.Model):
     nombre = models.CharField(max_length=255)
     descripcion = models.TextField()
     estado = models.TextField()
-    proyecto = models.ForeignKey(Proyecto, on_delete=models.CASCADE, related_name='tareas')
-    asignada_a = models.ForeignKey(Usuario, on_delete=models.CASCADE, related_name='tareas_asignadas')
+    asignada_a = models.ForeignKey(Usuario, related_name='tareas_asignadas', on_delete=models.CASCADE)
+    proyecto = models.ForeignKey(Proyecto,  related_name='tareas', on_delete=models.CASCADE,)
 
     def __str__(self):
         return self.nombre

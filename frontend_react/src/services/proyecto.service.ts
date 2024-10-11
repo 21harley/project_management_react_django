@@ -1,4 +1,3 @@
-// src/api/project.api.ts
 import axios from './../utils/axiosConfig';
 import { Proyecto, CrearProyecto, ActualizarProyecto } from './../types/proyecto.type';
 

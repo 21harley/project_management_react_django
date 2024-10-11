@@ -1,4 +1,3 @@
-// src/api/task.api.ts
 import axios from './../utils/axiosConfig';
 import { Tarea, CrearTarea, ActualizarTarea, Proyecto } from './../types/tareas.type';
 

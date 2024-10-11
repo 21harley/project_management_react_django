@@ -12,7 +12,26 @@ from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from . import serializers
+from rest_framework.exceptions import PermissionDenied, ValidationError
 
+from rest_framework.exceptions import APIException
+
+class CustomAPIException(APIException):
+    status_code = 400  # Código de estado predeterminado
+    default_detail = 'Un error ha ocurrido.'
+    default_code = 'error'
+
+    def __init__(self, detail=None, status_code=None):
+        if detail is not None:
+            self.detail = detail  # Aquí definimos el detalle de la excepción
+        else:
+            self.detail = self.default_detail
+
+        if status_code is not None:
+            self.status_code = status_code
+
+def format_error_response(message, status_code):
+    return Response(data={"msg": message}, status=status_code)
 
 class IsAdminOrOwner(permissions.BasePermission):
     def has_permission(self, request, view):
@@ -32,7 +51,7 @@ class IsAdminOrOwner(permissions.BasePermission):
             return obj.usuario == request.user
 
         return False
-
+   
 
 class ProyectoViewSet(viewsets.ModelViewSet):
     queryset = Proyecto.objects.all()
@@ -46,34 +65,39 @@ class ProyectoViewSet(viewsets.ModelViewSet):
         return Proyecto.objects.filter(usuario=self.request.user)
 
     def perform_create(self, serializer):
-        # Verificar si el usuario es admin antes de guardar
         if self.request.user.rol != 'admin':
-            raise PermissionDenied("Solo los administradores pueden crear un proyecto.")
+            raise format_error_response("Solo los administradores pueden crear un proyecto.",status_code= status.HTTP_403_FORBIDDEN)
 
-        # Obtener el ID del usuario del request
         usuario_id = self.request.data.get('usuario')
-
         try:
-            # Verificar que el usuario especificado existe
             usuario = Usuario.objects.get(id=usuario_id)
         except Usuario.DoesNotExist:
-            raise serializers.ValidationError({"usuario": "El usuario especificado no existe."})
+            raise ValidationError({'msg':"El usuario especificado no existe."})
 
-        # Guardar el proyecto con el usuario especificado
-        serializer.save(usuario=usuario)
+        proyecto = serializer.save(usuario=usuario)
+
+        # Crear la alerta para el usuario asignado
+        Alerta.objects.create(usuario=usuario, mensaje=f"Se te ha asignado un nuevo proyecto: {proyecto.nombre}")
 
     def perform_update(self, serializer):
         if self.request.user.rol != 'admin':
             if serializer.instance.usuario != self.request.user:
-                raise PermissionDenied("No tiene permiso para actualizar este proyecto.")
+                raise format_error_response("No tiene permiso para actualizar este proyecto.", status_code=status.HTTP_403_FORBIDDEN)
         serializer.save()
 
     def perform_destroy(self, instance):
-        if self.request.user.rol != 'admin':
-            if instance.usuario != self.request.user:
-                raise PermissionDenied("No tiene permiso para eliminar este proyecto.")
-        instance.delete()
+        # Verificar si hay tareas asociadas al proyecto
+        tareas_count = instance.tareas.count()  # Aquí estamos contando las tareas asociadas al proyecto
 
+        if tareas_count > 0:
+            raise format_error_response("No se puede eliminar el proyecto porque tiene tareas asociadas.", status_code=status.HTTP_400_BAD_REQUEST)
+
+        # Validar que el usuario que intenta eliminar es admin o el usuario encargado del proyecto
+        if self.request.user.rol != 'admin' and instance.usuario != self.request.user:
+            raise format_error_response("No tiene permiso para eliminar este proyecto.",status_code = status.HTTP_403_FORBIDDEN)
+
+        # Si las validaciones pasan, eliminar el proyecto
+        instance.delete()
 
 # Vista para Tareas
 class TareaViewSet(viewsets.ModelViewSet):
@@ -140,54 +164,89 @@ class TareaViewSet(viewsets.ModelViewSet):
         return Response(response_data)
     
     def perform_create(self, serializer):
-        proyecto_id = self.request.data.get('proyecto')  # Obtenemos el proyecto del request
-        asignada_a_id = self.request.data.get('asignada_a')  # Obtenemos el usuario asignado
-
+        proyecto_id = self.request.data.get('proyecto')
+        asignada_a_id = self.request.data.get('asignada_a')
+    
+        # Verificar el proyecto
         try:
-            proyecto = Proyecto.objects.get(id=proyecto_id)  # Validamos que el proyecto exista
+            proyecto = Proyecto.objects.get(id=proyecto_id)
         except Proyecto.DoesNotExist:
-            return Response({'detail': 'El proyecto no existe.'}, status=status.HTTP_404_NOT_FOUND)
-
-        # Verificamos si el usuario tiene permiso para asignar la tarea
+            raise ValidationError({'msg': 'El proyecto no existe.'})
+    
+        # Verificar permisos
         if self.request.user.rol != 'admin' and proyecto.usuario != self.request.user:
-            return Response({'detail': 'No tiene permiso para crear una tarea en este proyecto.'}, status=status.HTTP_403_FORBIDDEN)
-
+            raise ValidationError({'msg': 'No tiene permiso para crear una tarea en este proyecto.'})
+    
+        # Verificar el usuario asignado
         try:
-            asignada_a = Usuario.objects.get(id=asignada_a_id)  # Validamos que el usuario exista
+            asignada_a = Usuario.objects.get(id=asignada_a_id)
         except Usuario.DoesNotExist:
-            return Response({'detail': 'El usuario asignado no existe.'}, status=status.HTTP_404_NOT_FOUND)
+            raise ValidationError({'msg': 'El usuario asignado no existe.'})
+    
+        # Si todas las validaciones son correctas, guarda la tarea
+        tarea = serializer.save(proyecto=proyecto, asignada_a=asignada_a)
+    
+        # Crear la alerta para el usuario asignado
+        Alerta.objects.create(usuario=asignada_a, mensaje=f"Se te ha asignado una nueva tarea: {tarea.nombre}")
+    
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-        # Guardamos la tarea con los datos
-        serializer.save(proyecto=proyecto, asignada_a=asignada_a)
 
     def partial_update(self, request, *args, **kwargs):
-        instance = self.get_object()
-
-        # Verificar si el usuario tiene permisos para actualizar otros campos
-        if request.user.is_staff or request.user == instance.asignada_a:
-            # Si el usuario es admin o está asignado a la tarea, permite la actualización de todos los campos
+        instance = self.get_object()  # Obtiene la tarea específica
+        original_estado = instance.estado  # Guarda el estado original
+    
+        # Verifica si el usuario es admin
+        if request.user.rol == 'admin':
             serializer = self.get_serializer(instance, data=request.data, partial=True)
             serializer.is_valid(raise_exception=True)
             self.perform_update(serializer)
-
-            logger.info(f"Tarea {instance.id} actualizada. Notificando a {instance.asignada_a.username}.")
-            # Aquí puedes agregar lógica para notificar al usuario asignado
-
+    
+            # Crea la alerta
+            Alerta.objects.create(
+                usuario=instance.asignada_a,
+                mensaje=f"El estado de la tarea '{instance.nombre}' ha cambiado a '{instance.estado}'"
+            )
             return Response(serializer.data)
-
-        # Permitir solo la actualización del estado para otros usuarios
-        if 'estado' in request.data:
+    
+        # Verifica si el usuario asignado a la tarea intenta modificar el estado
+        if request.user == instance.asignada_a:
+            if 'estado' in request.data:
+                serializer = self.get_serializer(instance, data=request.data, partial=True)
+                serializer.is_valid(raise_exception=True)
+                self.perform_update(serializer)
+    
+                # Crea la alerta
+                Alerta.objects.create(
+                    usuario=instance.asignada_a,
+                    mensaje=f"El estado de la tarea '{instance.nombre}' ha cambiado a '{instance.estado}'"
+                )
+                return Response(serializer.data)
+    
+        # Verifica si el usuario es el propietario del proyecto
+        if request.user.id == instance.proyecto.usuario.id:
+            # Si el usuario es el propietario del proyecto, permite modificar todos los campos
             serializer = self.get_serializer(instance, data=request.data, partial=True)
             serializer.is_valid(raise_exception=True)
             self.perform_update(serializer)
-
-            logger.info(f"Estado de tarea {instance.id} actualizado por {request.user.username}.")
+    
+            # Crea la alerta
+            Alerta.objects.create(
+                usuario=instance.asignada_a,
+                mensaje=f"El estado de la tarea '{instance.nombre}' ha cambiado a '{instance.estado}'"
+            )
             return Response(serializer.data)
-
+    
+        # Si ninguna de las condiciones se cumple, no se permite la modificación
+        alert_message = "No tienes permiso para modificar estos campos."
         return Response(
-            {"detail": "No tienes permiso para modificar estos campos."},
+            {"detail": alert_message},
             status=status.HTTP_403_FORBIDDEN
         )
+
+
+
+
 
     @action(detail=False, methods=['get'], permission_classes=[permissions.IsAuthenticated])
     def filter_by_project(self, request):
@@ -202,17 +261,14 @@ class UsuarioViewSet(viewsets.ModelViewSet):
     authentication_classes = [JWTAuthentication]
 
     def get_queryset(self):
-        # Si el usuario es administrador, devuelve todos los usuarios
         if self.request.user.rol == 'admin':
             return Usuario.objects.all()
-        # Si el usuario es regular, devuelve solo su propio usuario
         return Usuario.objects.filter(id=self.request.user.id)
 
     def get_permissions(self):
         if self.action in ['create', 'login']:
             self.permission_classes = [permissions.AllowAny]
         elif self.action in ['list', 'retrieve']:
-            # Solo los administradores pueden listar todos los usuarios
             self.permission_classes = [permissions.IsAuthenticated]
         else:
             self.permission_classes = [permissions.IsAuthenticated]
@@ -243,17 +299,22 @@ class UsuarioViewSet(viewsets.ModelViewSet):
                     'token': str(refresh.access_token),
                 })
             else:
-                return Response({'detail': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
+                return format_error_response( 'Invalid credentials', status_code=status.HTTP_401_UNAUTHORIZED)
         except Usuario.DoesNotExist:
-            return Response({'detail': 'User does not exist'}, status=status.HTTP_404_NOT_FOUND)
+             raise ValidationError({'msg':'User does not exist'})
 
     def retrieve(self, request, *args, **kwargs):
         instance = self.get_object()
-        if request.user.rol == 'admin' or instance == request.user:
-            serializer = self.get_serializer(instance)
-            return Response(serializer.data)
-        else:
-            return Response({'detail': 'No tiene permiso para acceder a esta información.'}, status=status.HTTP_403_FORBIDDEN)
+        serializer = self.get_serializer(instance)
+
+        # Si el usuario es admin, incluir la contraseña en la respuesta
+        if request.user.rol == 'admin':
+            data = serializer.data
+            data['password'] = instance.password  # Asegúrate de que el campo de contraseña esté en el serializer
+            return Response(data)
+
+        # Si no es admin, devolver la información sin la contraseña
+        return Response(serializer.data)
 
     @action(detail=False, methods=['get'], permission_classes=[permissions.IsAuthenticated])
     def me(self, request):
@@ -265,37 +326,41 @@ class UsuarioViewSet(viewsets.ModelViewSet):
             "rol": request.user.rol,
         })
 
-    @action(detail=False, methods=['delete'], permission_classes=[permissions.IsAuthenticated])
-    def delete_user(self, request):
-        user = request.user
+    def destroy(self, request, pk=None):
+        try:
+            user_to_delete = self.get_object()
+            proyectos_count = user_to_delete.proyectos.count()
+            tareas_count = user_to_delete.tareas_asignadas.count()
 
-        # Verificar si el usuario tiene proyectos o tareas asociadas
-        if user.proyecto_set.exists() or user.tarea_set.exists():
-            return Response({'detail': 'No se puede eliminar el usuario porque tiene proyectos o tareas asociadas.'}, status=status.HTTP_400_BAD_REQUEST)
+            if proyectos_count > 0 or tareas_count > 0:
+                return format_error_response('No se puede eliminar el usuario porque tiene proyectos o tareas asociadas.',
+                                status_code=status.HTTP_400_BAD_REQUEST)
 
-        # Permitir a un administrador eliminar cualquier usuario
-        if request.user.rol == 'admin':
-            user.delete()  # Eliminar el usuario
-            return Response({'detail': 'Usuario eliminado correctamente.'}, status=status.HTTP_204_NO_CONTENT)
+            if request.user.rol == 'admin':
+                user_to_delete.delete()
+            elif user_to_delete == request.user:
+                user_to_delete.delete()
+            else:
+                return format_error_response('No tiene permiso para eliminar este usuario.',
+                                status_code=status.HTTP_403_FORBIDDEN)
 
-        # Permitir a un usuario normal eliminar solo su propio perfil
-        if user == request.user:
-            user.delete()  # Eliminar el usuario
-            return Response({'detail': 'Usuario eliminado correctamente.'}, status=status.HTTP_204_NO_CONTENT)
+            return format_error_response( 'Usuario eliminado correctamente.', status_code=status.HTTP_204_NO_CONTENT)
 
-        return Response({'detail': 'No tiene permiso para eliminar este usuario.'}, status=status.HTTP_403_FORBIDDEN)
+        except Usuario.DoesNotExist:
+            raise ValidationError({'msg':'Usuario no encontrado.'})
+        except Exception as e:
+            logger.error(f"Error al eliminar usuario: {e}")
+            raise ValidationError({'msg': 'Error al eliminar el usuario.'})
 
     def update(self, request, *args, **kwargs):
         partial = kwargs.pop('partial', False)
         instance = self.get_object()
 
-        # Verificar si el usuario está intentando cambiar el rol
         if 'rol' in request.data and request.user.rol != 'admin':
-            return Response({'detail': 'No tiene permiso para modificar el rol.'}, status=status.HTTP_403_FORBIDDEN)
+            return format_error_response('No tiene permiso para modificar el rol.', status_code=status.HTTP_403_FORBIDDEN)
 
-        # Verificar que el usuario tenga permiso para modificar su propio perfil
         if instance != request.user and request.user.rol != 'admin':
-            return Response({'detail': 'No tiene permiso para modificar este usuario.'}, status=status.HTTP_403_FORBIDDEN)
+            return format_error_response('No tiene permiso para modificar este usuario.', status_code=status.HTTP_403_FORBIDDEN)
 
         serializer = self.get_serializer(instance, data=request.data, partial=partial)
         serializer.is_valid(raise_exception=True)
@@ -304,10 +369,7 @@ class UsuarioViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
 
-
-
 #AlertaViewSet
-
 class IsAdminOrAlertOwner(permissions.BasePermission):
     def has_object_permission(self, request, view, obj):
         # Solo los administradores o el usuario asignado pueden ver/modificar la alerta
@@ -318,24 +380,40 @@ class IsAdminOrAlertOwner(permissions.BasePermission):
 class AlertaViewSet(viewsets.ModelViewSet):
     queryset = Alerta.objects.all()
     serializer_class = AlertaSerializer
-    permission_classes = [permissions.IsAuthenticated, IsAdminOrAlertOwner]  # Cualquier usuario autenticado puede crear una alerta
+    permission_classes = [permissions.IsAuthenticated, IsAdminOrAlertOwner]
     authentication_classes = [JWTAuthentication]
 
     def get_queryset(self):
-        # Solo permite que el administrador o el usuario asignado vean la alerta
         if self.request.user.rol == 'admin':
             return Alerta.objects.all()
         return Alerta.objects.filter(usuario=self.request.user)
 
     def perform_create(self, serializer):
-        # Permitir que cualquier usuario cree alertas
-        usuario_id = self.request.data.get('usuario')  # El ID del usuario al que se le envía la alerta
-        
+        usuario_id = self.request.data.get('usuario')
         try:
-            # Validar que el usuario asignado existe
             usuario = Usuario.objects.get(id=usuario_id)
         except Usuario.DoesNotExist:
-            raise serializers.ValidationError({"usuario": "El usuario especificado no existe."})
-        
-        # Guardar la alerta con el usuario especificado
+            raise ValidationError({'msg': "El usuario especificado no existe."})
         serializer.save(usuario=usuario)
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        if request.user.rol != 'admin' and instance.usuario != request.user:
+            return Response({'msg': 'No tiene permiso para eliminar esta alerta.'}, status=status.HTTP_403_FORBIDDEN)
+        return super().destroy(request, *args, **kwargs)
+
+    @action(detail=False, methods=['patch'], url_path='update-visibility')
+    def update_visibility(self, request):
+        ids = request.data.get('ids', [])
+        if not ids:
+            return Response({'msg': 'No se proporcionaron IDs.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Verificar que los IDs son válidos
+        alerts = Alerta.objects.filter(id__in=ids)
+        if alerts.count() != len(ids):
+            return Response({'msg': 'Algunos IDs no son válidos.'}, status=status.HTTP_404_NOT_FOUND)
+
+        # Actualizar el campo 'visible' a 0 para las alertas encontradas
+        alerts.update(visible=0)
+
+        return Response({'msg': 'Visibilidad actualizada correctamente.'}, status=status.HTTP_200_OK)

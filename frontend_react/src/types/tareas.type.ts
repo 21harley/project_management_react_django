@@ -37,5 +37,5 @@ export interface Proyecto {
     fecha_inicio: string; // Formato de fecha
     fecha_finalizacion: string; // Formato de fecha
     usuario: number; // ID del usuario creador
-    tareas: Tarea[]; // Lista de tareas asociadas al proyecto
+    tareas?: Tarea[]; // Lista de tareas asociadas al proyecto
 }
