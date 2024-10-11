@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { register } from '../services/authService';
+import { register } from '../services/auth.service';
 import { RegisterData } from '../types/auth.types';
 import { TextField, Button, Typography, Container, Box } from '@mui/material';
 import { Link } from 'react-router-dom';

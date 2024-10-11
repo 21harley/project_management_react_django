@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { jwtDecode } from 'jwt-decode';
-import { AuthResponse, LoginData, RegisterData, User } from './../types/auth.types';
+import { AuthResponse, LoginData, RegisterData, User } from '../types/auth.types';
 import { REACT_APP_API_URL } from '../evn';
 const API_URL = REACT_APP_API_URL;
 

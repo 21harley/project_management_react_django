@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { getCurrentUser, logout } from '../services/authService';
+import { getCurrentUser, logout } from '../services/auth.service';
 import { User } from './../types/auth.types';
 
 export const useAuth = () => {

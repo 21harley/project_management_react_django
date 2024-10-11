@@ -8,9 +8,10 @@ export interface LoginData {
   }
   
   export interface User {
-    id: string;
+    id: number;
     username: string;
     email: string;
+    rol?: string;
   }
 
   // Datos necesarios para el registro
