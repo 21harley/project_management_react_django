@@ -1,7 +1,3 @@
-Aquí está la versión actualizada del README para reflejar la generación de datos, la clave por defecto y los usuarios con sus roles:
-
----
-
 # API de Gestión de Proyectos y Tareas
 
 Este es un proyecto de API desarrollado en Django Rest Framework que permite gestionar proyectos, tareas, usuarios y alertas. Los usuarios pueden autenticarse y, dependiendo de su rol, gestionar proyectos y tareas, recibir notificaciones, y realizar CRUD (Crear, Leer, Actualizar, Eliminar) de las entidades relacionadas.
