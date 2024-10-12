@@ -1,4 +1,4 @@
-```markdown
+
 # Proyecto React + TypeScript + Vite
 
 Este proyecto es una configuración básica para crear aplicaciones de React utilizando Vite, TypeScript y herramientas modernas de desarrollo.
