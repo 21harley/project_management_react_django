@@ -384,8 +384,6 @@ class AlertaViewSet(viewsets.ModelViewSet):
     authentication_classes = [JWTAuthentication]
 
     def get_queryset(self):
-        if self.request.user.rol == 'admin':
-            return Alerta.objects.all()
         return Alerta.objects.filter(usuario=self.request.user)
 
     def perform_create(self, serializer):
